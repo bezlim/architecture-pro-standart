@@ -1,0 +1,93 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 11
+skinparam rectangle {
+    Padding 5
+}
+
+title Диаграмма контейнеров — Передача ставок в кол-центр (MVP)
+
+' Actors
+actor "Сотрудник бэк-офиса" as backoffice
+actor "Менеджер кол-центра" as callcenter_manager
+actor "Менеджер партнёрского кол-центра" as partner_manager
+
+' ABS Boundary
+rectangle "АБС" <<ЦОД банка>> as abs {
+    rectangle "Desktop-клиент\n(Delphi)" as desktop #LightBlue
+    rectangle "База данных\n(Oracle, PL/SQL)" as abs_db #E1D5E7
+    rectangle "Rate Management\nModule (PL/SQL)" as rate_mod #D5E8D4
+    rectangle "Kafka Producer\n(Java / Python)" as kafka_prod #FFF2CC
+}
+
+' External Systems
+rectangle "Система кол-центра" <<ЦОД банка>> as cc_boundary {
+    rectangle "База данных\n(PostgreSQL)" as cc_db #E1D5E7
+    rectangle "Kafka Consumer\n(Java Spring Boot)" as kafka_cons #D5E8D4
+    rectangle "Rate API\n(Java Spring Boot)" as rate_api #D5E8D4
+    rectangle "Rate UI\n(React.js)" as rate_ui #LightBlue
+}
+
+rectangle "SFTP Sender\n(Java / Python)" as sftp_sender #LightBlue
+database "SFTP Server (партнёр)" as sftp_partner #LightYellow
+queue "Kafka (топик rates)" as kafka_rates #F8CECC
+
+' === ABS internal ===
+desktop --> abs_db : SQL: работа с заявками
+desktop --> rate_mod : Управление ставками (UC3)
+rate_mod --> abs_db : PL/SQL: сохранение ставок (UC3)
+
+rate_mod --> kafka_prod : Обновление ставок (UC3)
+kafka_prod --> kafka_rates : Публикация обновления
+
+' === Call Center boundary ===
+kafka_cons --> kafka_rates : Подписка на топик rates (UC1)
+kafka_cons --> cc_db : Обновление локальной копии
+
+rate_api --> cc_db : Запрос ставок (UC1)
+rate_api --> rate_ui : REST: ставки для UI (мс отклик)
+
+rate_ui --> callcenter_manager : Интерфейс отображения ставок (UC1)
+
+' SFTP Sender flow
+sftp_sender --> kafka_rates : Чтение ставок (UC2, UC4)
+sftp_sender --> sftp_partner : Отправка файла (CSV/JSON) (UC2, UC4)
+
+' External partner
+sftp_partner --> partner_manager : Доступ к ставкам (UC2)
+
+note bottom of kafka_prod
+  Реализован на Java/Python — типовые технологии банка.
+  Выделяет обновления ставок из rate_mod в Kafka (NFR1).
+end note
+
+note bottom of kafka_cons
+  Java Spring Boot — уже используется в системе кол-центра (NFR4).
+  Обновляет PostgreSQL для быстрого API (мс отклик, NFR1).
+end note
+
+note bottom of rate_api
+  Java Spring Boot микросервис (NFR7 — масштабирование).
+  Обеспечивает 24/7 доступность и SLA 99.9% (NFR2).
+end note
+
+note bottom of rate_ui
+  React.js — уже используется в системе кол-центра (NFR4).
+end note
+
+note bottom of sftp_sender
+  Java/Python — технологически совместимо с банком.
+  SFTP с шифрованием (NFR3), логирование (NFR6).
+end note
+
+note right of rate_mod
+  Замена XLS-файлов на централизованное
+  управление ставками в АБС (UC3)
+end note
+
+note right of kafka_rates
+  Уже используется в системе кол-центра
+  для заявок на депозиты (NFR4)
+end note
+
+@enduml
