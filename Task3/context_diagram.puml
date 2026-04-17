@@ -1,0 +1,34 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 12
+
+title Контекстная диаграмма — Открытие депозитов онлайн (MVP)
+
+actor "Клиент банка" as client
+actor "Новый клиент" as new_client
+actor "Сотрудник бэк-офиса" as backoffice
+actor "Менеджер кол-центра" as callcenter
+
+rectangle "Интернет-банк" as internet_bank #LightBlue
+rectangle "Сайт банка" as site #LightBlue
+rectangle "АБС" as abs #LightGreen
+rectangle "Система кол-центра" as callcenter_sys #LightBlue
+rectangle "СМС-шлюз" as sms_gateway #LightYellow
+queue "Kafka" as kafka #LightCoral
+
+client --> internet_bank : Подача заявки на депозит
+new_client --> site : Заявка на депозит (ФИО, телефон)
+backoffice --> abs : Обработка заявки, подтверждение ставки
+callcenter --> callcenter_sys : Работа с заявкой с сайта
+
+internet_bank --> kafka : Публикация заявки на депозит
+kafka --> abs : Передача заявки в обработку
+site --> callcenter_sys : Передача заявки клиента
+
+internet_bank --> sms_gateway : Запрос СМС-кода подтверждения
+abs --> sms_gateway : Отправка СМС-уведомления о статусе
+
+sms_gateway --> client : СМС-код / уведомление
+sms_gateway --> new_client : СМС-уведомление
+
+@enduml

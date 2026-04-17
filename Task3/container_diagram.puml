@@ -1,0 +1,95 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 11
+skinparam rectangle {
+    Padding 5
+}
+
+title Диаграмма контейнеров — Открытие депозитов онлайн (MVP)
+
+' Actors
+actor "Клиент банка" as client
+actor "Новый клиент" as new_client
+actor "Сотрудник бэк-офиса" as backoffice
+actor "Менеджер кол-центра" as callcenter
+
+' Internet Bank Boundary
+rectangle "Интернет-банк" <<ЦОД банка>> as ib {
+    rectangle "Web-приложение\n(ASP.NET MVC 4.5, .NET 4.5)" as web_app #LightBlue
+    rectangle "База данных\n(MS SQL)" as ib_db #E1D5E7
+    rectangle "Deposit Service\n(.NET Core / Java)" as deposit_svc #D5E8D4
+    rectangle "SMS Client" as sms_client #FFF2CC
+}
+
+' ABS Boundary
+rectangle "АБС" <<ЦОД банка>> as abs {
+    rectangle "Desktop-клиент\n(Delphi)" as desktop #LightBlue
+    rectangle "База данных\n(Oracle, PL/SQL)" as abs_db #E1D5E7
+    rectangle "Rate Management\nModule (PL/SQL)" as rate_mod #D5E8D4
+    rectangle "Kafka Consumer\n(Java / Python)" as kafka_cons #FFF2CC
+}
+
+' External Systems
+rectangle "Сайт банка\n(PHP, React.js)" as site #LightBlue
+rectangle "Система кол-центра\n(Java Spring Boot, PostgreSQL)" as cc_sys #LightBlue
+rectangle "СМС-шлюз\n(Телеком-оператор)" as sms_gw #FFF2CC
+queue "Kafka" as kafka #F8CECC
+
+' === Client flows ===
+client --> web_app : UC1, F1, F12: Подача заявки, СМС-код
+new_client --> site : UC3, F3: Заявка (ФИО, телефон)
+backoffice --> desktop : UC2, UC4, UC5: Обработка, ставки
+callcenter --> cc_sys : F8: Работа с заявкой с сайта
+
+' === Internet Bank internal ===
+web_app --> ib_db : SQL: данные пользователей, счетов
+web_app --> deposit_svc : REST: операции с депозитами
+deposit_svc --> sms_client : Запрос СМС-кода (F12)
+sms_client --> sms_gw : HTTP: отправка СМС
+
+' === Deposit Service to Kafka ===
+deposit_svc --> kafka : Публикация заявки (F1, F9)
+
+' === Kafka to ABS ===
+kafka --> kafka_cons : Потребление заявки
+kafka_cons --> abs_db : PL/SQL: запись заявки в очередь
+
+' === ABS internal ===
+desktop --> abs_db : SQL: работа с заявками
+desktop --> rate_mod : Управление ставками (F10)
+rate_mod --> abs_db : PL/SQL: сохранение ставок
+abs_db --> sms_gw : СМС-уведомление о статусе (F11)
+
+' === ABS data sync for Internet Bank via Kafka ===
+deposit_svc --> kafka : Запрос данных клиента (F1b)\nПерсонализированные ставки
+kafka --> kafka_cons : Потребление запроса
+kafka_cons --> abs_db : Запрос в Oracle
+abs_db --> kafka_cons : Ответ с данными
+kafka_cons --> kafka : Публикация ответа
+kafka --> deposit_svc : Получение данных клиента
+
+' === Site to Call Center ===
+site --> cc_sys : Передача заявки (F3, F8)
+
+' === SMS responses ===
+sms_gw --> client : СМС-код / уведомление (F11, F12)
+sms_gw --> new_client : СМС-уведомление
+
+note bottom of deposit_svc
+  Новый микросервис для депозитов.
+  Обеспечивает интеграцию с Kafka,
+  т.к. ASP.NET MVC 4.5 несовместим (+R12)
+end note
+
+note bottom of kafka_cons
+  Потребляет заявки из Kafka,
+  записывает в Oracle для обработки
+  бэк-офисом через Delphi-клиент
+end note
+
+note right of rate_mod
+  Замена XLS-файлов на централизованное
+  управление ставками в АБС (F10)
+end note
+
+@enduml

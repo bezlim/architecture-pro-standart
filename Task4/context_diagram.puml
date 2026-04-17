@@ -1,0 +1,28 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 12
+
+title Контекстная диаграмма — Передача ставок в кол-центр (MVP)
+
+actor "Сотрудник бэк-офиса" as backoffice
+actor "Менеджер кол-центра" as callcenter_manager
+actor "Менеджер партнёрского кол-центра" as partner_manager
+
+rectangle "АБС (Rate Management Module)" as abs #LightGreen
+queue "Kafka (топик rates)" as kafka_rates #LightCoral
+rectangle "Система кол-центра" as callcenter_sys #LightBlue
+rectangle "SFTP Sender" as sftp_sender #LightBlue
+database "SFTP Server (партнёр)" as sftp_partner #LightYellow
+
+backoffice --> abs : Обновление ставок по депозитам
+abs --> kafka_rates : Публикация обновления ставок
+
+callcenter_sys --> kafka_rates : Подписка на обновления
+callcenter_sys --> callcenter_manager : Отображение актуальных ставок
+
+sftp_sender --> kafka_rates : Чтение ставок из Kafka
+sftp_sender --> sftp_partner : Отправка файла со ставками (CSV/JSON)
+
+sftp_partner --> partner_manager : Доступ к актуальным ставкам
+
+@enduml
