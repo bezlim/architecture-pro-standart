@@ -1,0 +1,68 @@
+@startuml
+title Диаграмма компонентов: Онлайн-кредитование
+
+' Internet Banking Boundary
+folder "Интерфейсы" {
+  node "Интернет-банк\nASP.NET Core / React.js" as ib_web
+  node "Сайт банка\nReact.js / CMS" as site_web
+  node "CRM Кол-центр\nReact.js" as crm_ui
+}
+
+' Banking Services Boundary  
+folder "Микросервисы" {
+  queue "Apache Kafka" as kafka
+  database "MS SQL: Client DB" as msql_client
+  database "MS SQL: Rate DB" as msql_rate
+  node "Credit Scoring Client\nJava Spring Boot" as scoring_client
+  node "SMS Gateway Service\nJava Spring Boot" as sms_gateway
+  node "Claim Processor\nJava Spring Boot" as claim_proc
+  node "BKI Client\nJava Spring Boot" as bki_client
+}
+
+' External Systems Boundary
+folder "Внешние системы" {
+  node "Система скоринга\nPython/Flask" as scoring_system
+  queue "Kafka (CRM)" as kafka_crm
+  database "БКИ Database" as bki_db
+  node "СМС-провайдер" as sms_provider
+}
+
+' Scoring module
+folder "Скоринг-модуль" {
+  node "Scoring Engine\nPython/Flask" as scoring_engine
+  database "Model Store\nPostgreSQL" as scoring_store
+}
+
+' Internal relationships
+ib_web --> msql_client : чтение клиентов, счетов
+ib_web --> msql_rate : ставки
+ib_web --> kafka : credit-applications
+ib_web --> sms_gateway : СМС-подтверждение
+
+site_web --> bki_client : запрос БКИ
+site_web --> kafka :credit-claims
+site_web --> sms_gateway : СМС-уведомления
+
+scoring_client --> scoring_system : запрос скоринга
+scoring_client --> kafka : credit-scoring-results
+
+claim_proc --> kafka : читает заявки, пишет статус
+claim_proc --> msql_client : запись решений
+
+bki_client --> kafka : bki-requests
+bki_client --> bki_db : REST API
+
+' CRM relationships
+site_web --> kafka_crm : credit-claims
+crm_ui --> kafka_crm : чтение заявок
+crm_ui --> msql_client : данные клиентов
+crm_ui --> kafka : обновление статуса
+
+' External relationships
+sms_gateway --> sms_provider : отправка СМС
+
+' Scoring module relationships
+scoring_client --> scoring_engine : запуск скоринга
+scoring_engine --> scoring_store : загрузка моделей
+
+@enduml

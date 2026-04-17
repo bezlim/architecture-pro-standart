@@ -1,0 +1,29 @@
+@startuml
+title Контекстная диаграмма: Онлайн-кредитование
+
+actor "Клиент" as customer
+
+boundary "Интернет-банк" as internet_banking
+boundary "Сайт банка" as website  
+boundary "CRM/Кол-центр" as crm
+database "АБС (Oracle)" as banking_system
+component "Система скоринга" as scoring_system
+database "БКИ" as bki
+
+customer --> internet_banking : Подача заявки
+customer --> website : Просмотр условий
+customer --> crm : Звонок менеджеру
+
+internet_banking --> banking_system : Kafka
+internet_banking --> scoring_system : Запрос скоринга
+
+website --> bki : REST API
+website --> scoring_system : Предварительный скоринг
+website --> crm : Kafka
+
+banking_system --> scoring_system : Kafka
+banking_system --> bki : Kafka
+
+crm --> banking_system : Просмотр заявок
+
+@enduml
